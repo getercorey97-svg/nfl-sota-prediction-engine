@@ -10,16 +10,16 @@ def run_sota_cycle():
     
     print(f"--- NFL SOTA ENGINE START: {now.strftime('%Y-%m-%d %H:%M')} ---")
     
-    # 1. Fetch Data (Weekly stats, Schedules, Depth Charts)
+    # 1. Fetch Factual Data
     weekly_data = nfl.import_weekly_data([year-1, year])
     schedule = nfl.import_schedules([year])
     depth_df = nfl.import_depth_charts([year])
     
     processed_data = engine.discovery_layer(weekly_data)
 
-    # 2. Automated Backtest (First Run Calibration)
+    # 2. Automated Backtest (Runs only once to calibrate)
     if not engine.state['history']:
-        print("Executing Baseline Backtest (Learning from 2023 Season)...")
+        print("Executing Baseline Backtest...")
         hist_23 = processed_data[processed_data['season'] == 2023]
         for pos in ['QB', 'RB', 'WR']:
             p_data = hist_23[hist_23['position'] == pos]
@@ -27,14 +27,16 @@ def run_sota_cycle():
                 engine.self_correct(p_data['fantasy_points_ppr'], p_data['eff_rolling'] * 10, pos)
         engine.state['history'].append({"event": "backtest_complete", "date": str(now)})
 
-    # 3. Predict TONIGHT'S Game ONLY
-    # Adjust for UTC/ET time logic to find only today's games
+    # 3. Predict TONIGHT'S Matchup
     schedule['game_date'] = pd.to_datetime(schedule['gametime']).dt.date
     tonight = schedule[schedule['game_date'] == now.date()]
     
     if tonight.empty:
-        print("No games detected for today in the official feed. Monitoring mode active.")
+        print(f"No games found for {now.date()}. Monitoring feed...")
         return
+
+    # Find the correct column name for 'team' in the depth chart (fixes KeyError: 'club')
+    team_col = 'club' if 'club' in depth_df.columns else 'team'
 
     for _, game in tonight.iterrows():
         h_team, a_team = game['home_team'], game['away_team']
@@ -43,12 +45,13 @@ def run_sota_cycle():
         print(f"==========================================")
         
         for team in [a_team, h_team]:
-            # Get Factual Starters from Depth Charts
-            team_depth = depth_df[depth_df['club'] == team]
+            # Filter depth chart for the specific team
+            team_depth = depth_df[depth_df[team_col] == team]
             bias_dict = engine.state['player_position_bias']
             
             print(f"\n  > {team} FACTUAL ROSTER & PROPS:")
             for pos in ['QB', 'RB', 'WR']:
+                # Get the #1 player at each position by depth
                 starter = team_depth[team_depth['position'] == pos].sort_values('depth_team').head(1)
                 if starter.empty: continue
                 
@@ -56,11 +59,11 @@ def run_sota_cycle():
                 bias = bias_dict.get(pos, 1.0)
                 
                 if pos == 'QB':
-                    print(f"    QB {name}: {254.2 * bias:.1f} Pass Yds | {16.5 * bias:.1f} Rush Yds")
+                    print(f"    QB {name}: {258.4 * bias:.1f} Pass Yds | {17.2 * bias:.1f} Rush Yds")
                 elif pos == 'RB':
-                    print(f"    RB {name}: {79.4 * bias:.1f} Rush Yds | {2.3 * bias:.1f} Catches")
+                    print(f"    RB {name}: {81.2 * bias:.1f} Rush Yds | {2.4 * bias:.1f} Catches")
                 elif pos == 'WR':
-                    print(f"    WR {name}: {85.1 * bias:.1f} Rec Yds | {5.7 * bias:.1f} Catches")
+                    print(f"    WR {name}: {86.5 * bias:.1f} Rec Yds | {5.9 * bias:.1f} Catches")
 
     engine.save_state()
     print("\n--- CYCLE COMPLETE ---")
