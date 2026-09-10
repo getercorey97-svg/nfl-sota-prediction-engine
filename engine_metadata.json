@@ -1,0 +1,28 @@
+{
+    "team_weights": {
+        "CLE": 1.03,
+        "LV": 1.03,
+        "CAR": 1.03,
+        "NYG": 1.03,
+        "HOU": 1.03,
+        "MIN": 1.03,
+        "TEN": 1.03,
+        "SF": 1.03,
+        "ARI": 1.03,
+        "WAS": 1.03,
+        "ATL": 1.03,
+        "CIN": 1.03,
+        "GB": 1.03,
+        "IND": 1.03
+    },
+    "history": [
+        {
+            "event": "baseline",
+            "date": "2026-09-10 23:41:44.973952"
+        }
+    ],
+    "seasonal_trends": {},
+    "model_params": {
+        "learning_rate": 0.05
+    }
+}
