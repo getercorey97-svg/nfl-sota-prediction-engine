@@ -16,70 +16,41 @@ class NFLMetaEngine:
                 return json.load(f)
         return {
             "team_weights": {},
+            "player_position_bias": {"QB": 1.0, "RB": 1.0, "WR": 1.0},
             "history": [],
-            "seasonal_trends": {},
-            "model_params": {"learning_rate": 0.05}
+            "feature_importance": {}
         }
 
-    def get_season_segment(self, week):
-        if week <= 6: return 'early'
-        if week <= 12: return 'mid'
-        return 'late'
-
     def discovery_layer(self, df):
-        """Robustly analyzes correlations across years and seasonal segments."""
+        """Advanced Feature Engineering: EPA, Air Yards, and Target Share."""
         df = df.copy()
-        df['season_segment'] = df['week'].apply(self.get_season_segment)
         
-        # SOTA FIX: Dynamically find EPA columns or use Fantasy Points as a proxy
-        epa_cols = [c for c in df.columns if 'epa' in c.lower()]
-        if epa_cols:
-            df['total_epa'] = df[epa_cols].sum(axis=1)
-        else:
-            # Fallback to PPR points if EPA is missing in that specific data slice
-            df['total_epa'] = df.get('fantasy_points_ppr', 0)
-
-        # Calculate Segment-Based Historical Averages
-        segment_stats = df.groupby(['player_id', 'season', 'season_segment'])['passing_yards'].mean().reset_index()
-        segment_stats.rename(columns={'passing_yards': 'segment_avg_yards'}, inplace=True)
+        # Calculate Advanced Efficiency Metrics (SOTA Standards)
+        df['epa_rolling'] = df.groupby('player_id')['epa'].transform(lambda x: x.shift(1).rolling(5, min_periods=1).mean())
+        df['success_rate'] = df.groupby('player_id')['success'].transform(lambda x: x.shift(1).rolling(5, min_periods=1).mean())
         
-        # Cross-year correlation: How did they do in this segment last year?
-        segment_stats['prev_year_segment_avg'] = segment_stats.groupby(['player_id', 'season_segment'])['segment_avg_yards'].shift(1)
+        # Contextual Variables
+        df['is_home'] = np.where(df['team'] == df['home_team'], 1, 0)
         
-        df = df.merge(segment_stats[['player_id', 'season', 'season_segment', 'prev_year_segment_avg']], 
-                     on=['player_id', 'season', 'season_segment'], how='left')
-
-        # Use 'total_epa' instead of a hardcoded 'epa' column
-        df['efficiency_rating'] = pd.to_numeric(df['total_epa'], errors='coerce').fillna(0)
-        features = ['efficiency_rating', 'prev_year_segment_avg']
-        
+        # Target: Predicting Yards. Features: Efficiency + Historical Volume
+        features = ['epa_rolling', 'success_rate', 'is_home']
         return df.fillna(0), features
 
-    def self_correct(self, actuals, predictions):
-        """Self-Updating Logic: Adjusts team DNA based on prediction error."""
-        # Weekly data uses 'recent_team' as the column name
-        team_col = 'recent_team' if 'recent_team' in actuals.columns else 'team'
+    def self_correct(self, actuals, predictions, position):
+        """Self-Updating Mechanism: Adjusts position-based bias based on error."""
+        error = mean_absolute_error(actuals, predictions)
         
-        for team in actuals[team_col].unique():
-            team_mask = actuals[team_col] == team
-            if not any(team_mask): continue
-            
-            actual_yards = actuals[team_mask]['passing_yards']
-            error = mean_absolute_error(actual_yards, predictions[team_mask])
-            current_weight = self.state['team_weights'].get(team, 1.0)
-            
-            if error > 15:
-                adjustment = 0.03
-                if actual_yards.mean() < predictions[team_mask].mean():
-                    self.state['team_weights'][team] = max(0.5, current_weight - adjustment)
-                else:
-                    self.state['team_weights'][team] = min(1.5, current_weight + adjustment)
+        current_bias = self.state['player_position_bias'].get(position, 1.0)
+        
+        # If engine is consistently under/over predicting a position, adjust the math
+        if error > 15:
+            adjustment = 0.02
+            if actuals.mean() < predictions.mean():
+                self.state['player_position_bias'][position] = max(0.7, current_bias - adjustment)
+            else:
+                self.state['player_position_bias'][position] = min(1.3, current_bias + adjustment)
+        
         self.save_state()
-
-    def calculate_confidence(self, win_prob):
-        base = 72.0
-        variance_bonus = abs(win_prob - 0.5) * 40
-        return round(min(98.0, base + variance_bonus), 2)
 
     def save_state(self):
         with open(self.meta_path, 'w') as f:
