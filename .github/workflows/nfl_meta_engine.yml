@@ -1,0 +1,33 @@
+name: NFL SOTA Meta-Engine
+on:
+  schedule:
+    - cron: '0 4 * * 1,2,5' # Runs at 4AM after Sun, Mon, and Thu games
+  workflow_dispatch:        # Allows manual execution
+
+jobs:
+  run-and-evolve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Execute Meta-Learning Pipeline
+        run: python pipeline.py
+
+      - name: Push Evolution to Repository
+        run: |
+          git config --global user.name 'SOTA-Meta-Bot'
+          git config --global user.email 'bot@nfl-sota.ai'
+          git add engine_metadata.json
+          git commit -m "Engine Evolution: New Correlations & Weights [$(date)]" || echo "No evolution needed"
+          git push
