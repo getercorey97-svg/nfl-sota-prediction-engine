@@ -27,10 +27,18 @@ class NFLMetaEngine:
         return 'late'
 
     def discovery_layer(self, df):
-        """Analyzes correlations across years and seasonal segments."""
+        """Robustly analyzes correlations across years and seasonal segments."""
         df = df.copy()
         df['season_segment'] = df['week'].apply(self.get_season_segment)
         
+        # SOTA FIX: Dynamically find EPA columns or use Fantasy Points as a proxy
+        epa_cols = [c for c in df.columns if 'epa' in c.lower()]
+        if epa_cols:
+            df['total_epa'] = df[epa_cols].sum(axis=1)
+        else:
+            # Fallback to PPR points if EPA is missing in that specific data slice
+            df['total_epa'] = df.get('fantasy_points_ppr', 0)
+
         # Calculate Segment-Based Historical Averages
         segment_stats = df.groupby(['player_id', 'season', 'season_segment'])['passing_yards'].mean().reset_index()
         segment_stats.rename(columns={'passing_yards': 'segment_avg_yards'}, inplace=True)
@@ -41,25 +49,28 @@ class NFLMetaEngine:
         df = df.merge(segment_stats[['player_id', 'season', 'season_segment', 'prev_year_segment_avg']], 
                      on=['player_id', 'season', 'season_segment'], how='left')
 
-        # Features for SOTA Prediction
-        df['epa_per_play'] = pd.to_numeric(df['epa'], errors='coerce')
-        features = ['epa_per_play', 'prev_year_segment_avg']
+        # Use 'total_epa' instead of a hardcoded 'epa' column
+        df['efficiency_rating'] = pd.to_numeric(df['total_epa'], errors='coerce').fillna(0)
+        features = ['efficiency_rating', 'prev_year_segment_avg']
         
         return df.fillna(0), features
 
     def self_correct(self, actuals, predictions):
         """Self-Updating Logic: Adjusts team DNA based on prediction error."""
-        for team in actuals['recent_team'].unique():
-            team_mask = actuals['recent_team'] == team
+        # Weekly data uses 'recent_team' as the column name
+        team_col = 'recent_team' if 'recent_team' in actuals.columns else 'team'
+        
+        for team in actuals[team_col].unique():
+            team_mask = actuals[team_col] == team
             if not any(team_mask): continue
             
-            error = mean_absolute_error(actuals[team_mask]['passing_yards'], predictions[team_mask])
+            actual_yards = actuals[team_mask]['passing_yards']
+            error = mean_absolute_error(actual_yards, predictions[team_mask])
             current_weight = self.state['team_weights'].get(team, 1.0)
             
-            # Evolution: If the engine was too high or low, adjust weights
             if error > 15:
                 adjustment = 0.03
-                if actuals[team_mask]['passing_yards'].mean() < predictions[team_mask].mean():
+                if actual_yards.mean() < predictions[team_mask].mean():
                     self.state['team_weights'][team] = max(0.5, current_weight - adjustment)
                 else:
                     self.state['team_weights'][team] = min(1.5, current_weight + adjustment)
@@ -67,7 +78,6 @@ class NFLMetaEngine:
 
     def calculate_confidence(self, win_prob):
         base = 72.0
-        # More extreme win probabilities (high or low) increase engine confidence
         variance_bonus = abs(win_prob - 0.5) * 40
         return round(min(98.0, base + variance_bonus), 2)
 
