@@ -19,23 +19,25 @@ class NFLMetaEngine:
             try:
                 with open(self.meta_path, 'r') as f:
                     loaded = json.load(f)
-                # Ensure all keys exist
                 if "team_params" not in loaded: loaded["team_params"] = default_state["team_params"]
-                if "history" not in loaded: loaded["history"] = []
                 return loaded
             except:
                 return default_state
         return default_state
 
     def self_correct(self, team, actual_val, pred_val, category='pass'):
+        """Updates team-specific DNA based on performance errors."""
         params = self.state['team_params'].get(team)
         if not params: return
+        
         error = actual_val - pred_val
         lr = params['lr']
+        
         if abs(error) > 2:
             direction = 1 if error > 0 else -1
             params['weight'] += (direction * lr * 0.1)
             params['bias'][category] += (direction * lr * 0.05)
+            # Maintain stability constraints
             params['weight'] = max(0.5, min(1.5, params['weight']))
             params['bias'][category] = max(0.5, min(1.5, params['bias'][category]))
         self.save_state()
