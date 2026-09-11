@@ -13,47 +13,32 @@ class NFLMetaEngine:
         if os.path.exists(self.meta_path):
             with open(self.meta_path, 'r') as f:
                 return json.load(f)
+        # Initialize state with default SOTA parameters for all 32 teams
+        teams = ['ARI','ATL','BAL','BUF','CAR','CHI','CIN','CLE','DAL','DEN','DET','GB','HOU','IND','JAX','KC','LV','LAC','LAR','MIA','MIN','NE','NO','NYG','NYJ','PHI','PIT','SF','SEA','TB','TEN','WAS']
         return {
-            "team_weights": {},
-            "player_position_bias": {"QB": 1.0, "RB": 1.0, "WR": 1.0},
+            "team_params": {t: {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}} for t in teams},
             "history": []
         }
 
-    def find_col(self, df, possibilities):
-        """Finds the first matching column name from a list of possibilities."""
-        for p in possibilities:
-            if p in df.columns:
-                return p
-        return None
+    def self_correct(self, team, actual_val, pred_val, category='pass'):
+        """Per-Team learning mechanism. Updates the specific team's DNA."""
+        params = self.state['team_params'].get(team)
+        if not params: return
 
-    def discovery_layer(self, df):
-        """Robustly aggregates efficiency metrics to prevent crashes."""
-        df = df.copy()
-        # Dynamically find efficiency/EPA columns
-        eff_cols = [c for c in df.columns if any(x in c.lower() for x in ['epa', 'success', 'points'])]
-        if eff_cols:
-            df['total_eff'] = df[eff_cols].mean(axis=1)
-        else:
-            df['total_eff'] = df.get('yards_gained', 0)
-
-        # Calculate Rolling Success
-        df = df.sort_values(['player_id', 'season', 'week'])
-        df['eff_rolling'] = df.groupby('player_id')['total_eff'].transform(lambda x: x.shift(1).rolling(3, min_periods=1).mean())
-        return df.fillna(0)
-
-    def self_correct(self, actuals, predictions, position):
-        """The core learning mechanism: Adjusts internal bias based on error."""
-        if len(actuals) == 0: return
-        error = mean_absolute_error(actuals, predictions)
-        current_bias = self.state['player_position_bias'].get(position, 1.0)
+        error = actual_val - pred_val
+        lr = params['lr']
         
-        # SOTA Logic: If error is high, adjust the 'DNA' for that position
-        if error > 5: 
-            adj = 0.02
-            if actuals.mean() < predictions.mean():
-                self.state['player_position_bias'][position] = max(0.6, current_bias - adj)
-            else:
-                self.state['player_position_bias'][position] = min(1.4, current_bias + adj)
+        # Adaptive Learning: If error is consistent, the engine 'evolves' the team weight
+        if abs(error) > 5:
+            direction = 1 if error > 0 else -1
+            params['weight'] += (direction * lr * 0.1)
+            # Update specific variable bias (Passing vs Rushing)
+            params['bias'][category] += (direction * lr * 0.05)
+            
+            # Constraints to keep model stable
+            params['weight'] = max(0.5, min(1.5, params['weight']))
+            params['bias'][category] = max(0.5, min(1.5, params['bias'][category]))
+            
         self.save_state()
 
     def save_state(self):
