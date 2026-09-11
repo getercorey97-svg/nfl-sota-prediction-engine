@@ -1,33 +1,29 @@
-name: NFL SOTA Meta-Engine
+name: NFL SOTA Live Engine
 on:
   schedule:
-    - cron: '0 */3 * * *' # Runs every 3 hours, every day
-  workflow_dispatch:      # Allows you to click "Run Workflow" manually
+    - cron: '*/30 * * * *' # Every 30 minutes for live roster monitoring
+  workflow_dispatch:
 
 jobs:
-  run-engine:
+  run-live-scout:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-      
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
       - name: Install Dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run SOTA Cycle
+        run: pip install nfl_data_py pandas numpy
+      - name: Run Engine
         run: python pipeline.py
-
-      - name: Commit Intelligence Update
+      - name: Commit Learned Team Weights
         run: |
-          git config --global user.name 'SOTA-Bot'
-          git config --global user.email 'bot@nfl-ai.com'
+          git config --global user.name 'SOTA-Live-Bot'
+          git config --global user.email 'bot@nfl-sota.com'
           git add engine_metadata.json
-          git commit -m "Engine Self-Update: $(date)" || echo "No changes"
+          git commit -m "Auto-Update: Game Day Roster & Team Intelligence [$(date)]" || echo "No changes"
           git push
