@@ -6,53 +6,57 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
-def find_col(df, options):
-    """Dynamically finds the correct column name from a list of possibilities."""
-    for opt in options:
-        if opt in df.columns:
-            return opt
-    return None
+def safe_load(func_list, years_list):
+    """Safely loads data year-by-year to prevent a single 404 error from crashing the batch."""
+    all_data = []
+    for y in years_list:
+        print(f"  Attempting to load data for {y}...")
+        for func in func_list:
+            if hasattr(nfl, func):
+                try:
+                    data = getattr(nfl, func)([y])
+                    if isinstance(data, pd.DataFrame) and not data.empty: 
+                        all_data.append(data)
+                        break
+                except Exception:
+                    print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")
+                    continue
+    if all_data:
+        return pd.concat(all_data, ignore_index=True)
+    return pd.DataFrame()
 
-def clean_name(name):
-    """Normalizes names to ensure accurate cross-referencing."""
-    if not name:
-        return ""
-    return str(name).lower().replace(".", "").replace(" jr", "").replace(" iii", "").strip()
-
-def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
+def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025, 2026]):
     """
-    Seeds the engine using 5 years of weighted historical data.
-    Calculates Base Weights, Playcalling Biases, and a Motivation/Seasonality Index.
+    Seeds the engine using historical data. 
+    Skips missing years gracefully to prevent crashes.
     """
-    print(f"🌱 Initiating 5-Year Engine Seeding for seasons: {years}...")
+    print(f"🌱 Initiating Engine Seeding...")
     
-    print("📥 Fetching schedules and weekly stats (this will take a moment)...")
-    sched = nfl.import_schedules(years)
-    weekly = nfl.import_weekly_data(years)
+    print("\n📥 Fetching schedules (year-by-year to prevent crashes)...")
+    sched = safe_load(['import_schedules', 'load_schedules'], years)
     
-    # Standardize columns to lowercase
-    sched.columns = sched.columns.str.lower()
-    weekly.columns = weekly.columns.str.lower()
+    print("\n📥 Fetching weekly data (year-by-year to prevent crashes)...")
+    weekly = safe_load(['import_weekly_data', 'load_weekly_data'], years)
     
-    # Drop games without scores
+    if sched.empty or weekly.empty:
+        print("❌ Fatal Error: Could not load sufficient historical data to seed.")
+        return
+        
     sched = sched.dropna(subset=['home_score', 'away_score'])
-    
-    # Find the team column in weekly data (could be 'recent_team', 'team', etc.)
-    team_col_weekly = find_col(weekly, ['recent_team', 'team', 'team_abbr'])
-    if not team_col_weekly:
-        raise ValueError("Could not find team column in weekly data")
+    actual_years = sorted(list(sched['season'].unique()))
+    print(f"\n✅ Successfully loaded valid data for seasons: {actual_years}")
     
     team_data = {}
     
     # 1. Process Data Year-by-Year with Exponential Decay
-    for year in years:
-        yr_weight = (year - min(years)) + 1 
+    for year in actual_years:
+        yr_weight = (year - min(actual_years)) + 1 
         yr_sched = sched[sched['season'] == year]
         yr_weekly = weekly[weekly['season'] == year]
         
         lg_ppg = (yr_sched['home_score'].mean() + yr_sched['away_score'].mean()) / 2
-        lg_pass = yr_weekly.groupby(team_col_weekly)['passing_yards'].sum().mean()
-        lg_rush = yr_weekly.groupby(team_col_weekly)['rushing_yards'].sum().mean()
+        lg_pass = yr_weekly.groupby('recent_team')['passing_yards'].sum().mean()
+        lg_rush = yr_weekly.groupby('recent_team')['rushing_yards'].sum().mean()
         
         for team in yr_sched['home_team'].unique():
             if team not in team_data:
@@ -67,22 +71,19 @@ def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
             t_pts = t_games.apply(lambda r: r['home_score'] if r['home_team'] == team else r['away_score'], axis=1)
             t_ppg = t_pts.mean()
             
-            t_wk = yr_weekly[yr_weekly[team_col_weekly] == team]
+            t_wk = yr_weekly[yr_weekly['recent_team'] == team]
             t_pass = t_wk['passing_yards'].sum()
             t_rush = t_wk['rushing_yards'].sum()
             
-            # Early vs Late Season splits for Motivation
             early_games = t_games[t_games['week'] <= 13]
             late_games = t_games[t_games['week'] >= 14]
             
             e_pts = early_games.apply(lambda r: r['home_score'] if r['home_team'] == team else r['away_score'], axis=1).mean()
             l_pts = late_games.apply(lambda r: r['home_score'] if r['home_team'] == team else r['away_score'], axis=1).mean()
             
-            team_data[team]['weighted_ppg_ratio'] += (t_ppg / lg_ppg) * yr_weight
+            team_data[team]['weighted_ppg_ratio'] += (t_ppg / max(lg_ppg, 1)) * yr_weight
             team_data[team]['weighted_pass_ratio'] += (t_pass / max(lg_pass, 1)) * yr_weight
             team_data[team]['weighted_rush_ratio'] += (t_rush / max(lg_rush, 1)) * yr_weight
-            
-            # Handle NaN for early/late splits (if no games in that split)
             team_data[team]['early_ppg'] += (np.nan_to_num(e_pts) * yr_weight)
             team_data[team]['late_ppg'] += (np.nan_to_num(l_pts) * yr_weight)
             team_data[team]['total_weight'] += yr_weight
@@ -100,7 +101,7 @@ def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
 
     if "team_params" not in state: state["team_params"] = {}
 
-    print("\n📊 5-Year Seeded Intelligence & Motivation Indices:")
+    print("\n📊 Seeded Intelligence & Motivation Indices:")
     for t, d in team_data.items():
         tw = d['total_weight']
         if tw == 0: continue
@@ -127,7 +128,7 @@ def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
     with open(meta_path, 'w') as f:
         json.dump(state, f, indent=4)
         
-    print("\n✅ 5-Year Seeding & Motivation Mapping Complete. The engine brain is primed.")
+    print("\n✅ Seeding & Motivation Mapping Complete. The engine brain is primed.")
 
 if __name__ == "__main__":
     seed_engine_5_year()
