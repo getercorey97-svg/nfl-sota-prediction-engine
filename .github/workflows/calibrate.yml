@@ -1,0 +1,45 @@
+name: NFL SOTA Calibration & Backtest
+on:
+  workflow_dispatch: # This creates a manual "Run" button in GitHub
+
+jobs:
+  seed-and-calibrate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+          
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Run 5-Year Seeder
+        run: python seed.py
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          
+      - name: Run Historical Backtest & Drift Reduction
+        run: python backtest.py
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          
+      - name: Commit Calibrated Brain
+        run: |
+          git config --global user.name 'SOTA-Live-Bot'
+          git config --global user.email 'bot@nfl-sota.com'
+          git add engine_metadata.json
+          git diff --staged --quiet || git commit -m "Deep Calibration: Seed & Backtest Complete [$(date -u +'%Y-%m-%d %H:%M') UTC]"
+          git push
