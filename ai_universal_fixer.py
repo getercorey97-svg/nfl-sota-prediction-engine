@@ -62,7 +62,7 @@ class AIFixer:
             print("❌ Error: Context is empty. Exiting process.")
             return
 
-        # NEW UNIVERSAL PROMPT
+        # NEW UNIVERSAL PROMPT MAPPED TO THE 404 CRASH & 2026 COLUMNS
         prompt = f"""
         You are the Lead Architect and Autonomous AI Self-Healing Agent for a State-of-the-Art NFL Prediction Engine.
         Review this entire multi-file system for Python accuracy, JSON validity, YAML workflow syntax, runtime bugs, and data schema mismatches.
@@ -71,8 +71,8 @@ class AIFixer:
         {context}
         
         REQUIRED FIXES (UNIVERSAL AUDIT):
-        1. Deeply analyze all provided files to identify and fix ANY bugs, crashes, schema mismatches, missing columns, deprecation warnings, or logical programming errors.
-        2. Ensure all data-fetching pipelines (like nfl_data_py integrations) dynamically handle missing or renamed columns (e.g., standardizing columns to lowercase, using robust fallback lists for position/team names).
+        1. CRITICAL 404 CRASH FIX: The nfl_data_py package throws an HTTP 404 error when attempting to fetch data for the year 2026 because the library is deprecated. You MUST rewrite the `safe_load` functions and any data-fetching logic in `seed.py`, `backtest.py`, and `pipeline.py` to iterate through years INDIVIDUALLY inside a `try...except` block. If a year fails, print a warning and `continue`. Do NOT pass the whole list of years to the API at once.
+        2. SCHEMA MIGRATION: Ensure all depth chart data dynamically looks for the new 2026 column names ('pos_abb', 'pos_name', 'pos_rank') alongside the old ones ('position', 'rank').
         3. Do NOT alter any existing predictive mathematics (Dixon-Coles, Copulas, Poisson logic, Backtesting logic, etc.) as they are already calibrated and correct. Only fix structural, data engineering, and code-level execution errors.
         4. Return the fully corrected code for ONLY the files that required changes. If a file is perfect, omit it from your response.
         
