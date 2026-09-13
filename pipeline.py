@@ -127,7 +127,10 @@ def run_realtime_cycle():
     score_col = find_col(sched, ['home_score', 'score_home', 'total_home_score'])
     name_col = find_col(weekly_stats, ['player_display_name', 'player_name', 'full_name'])
     team_col_depth = find_col(depth, ['club', 'team', 'team_abbr'])
-    depth_rank_col = find_col(depth, ['depth_team', 'depth', 'depth_order', 'rank'])
+    
+    # CRITICAL FIX 1: Added 'pos_rank' to handle new depth chart hierarchy schema
+    depth_rank_col = find_col(depth, ['depth_team', 'depth', 'depth_order', 'rank', 'pos_rank'])
+    
     team_col_weekly = find_col(weekly_stats, ['recent_team', 'team', 'team_abbr'])
     
     # Dixon-Coles rho parameter (estimated from historical data)
@@ -169,8 +172,8 @@ def run_realtime_cycle():
                     print(f"    {pos} Data Missing for this team.")
                     continue
                     
-                # CRITICAL FIX: Dynamic position column detection with fallback
-                pos_col = find_col(starters, ['position', 'pos', 'position_group'])
+                # CRITICAL FIX 2: Added 'pos_abb' and 'pos_name' to handle new position mapping schema
+                pos_col = find_col(starters, ['position', 'pos', 'position_group', 'pos_abb', 'pos_name'])
                 if pos_col is None:
                     print(f"    WARNING: No position column found in depth chart for {team}. Skipping {pos}.")
                     continue
