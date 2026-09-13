@@ -1,0 +1,52 @@
+name: 🤖 AI System Architect (Self-Correction)
+
+on:
+  workflow_dispatch: 
+  schedule:
+    - cron: '0 0 * * 1' 
+
+permissions:
+  contents: write 
+
+jobs:
+  total-system-repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📂 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install Repair Dependencies
+        run: |
+          pip install requests openai polars numpy scipy
+
+      - name: 🛠️ Run Universal AI Fixer
+        run: python ai_universal_fixer.py
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: 🚀 Commit & Push Healed Code
+        run: |
+          git config --global user.name 'AI-System-Architect'
+          git config --global user.email 'architect-bot@nfl.ai'
+          
+          # SAFER ADD LOGIC: 
+          git add *.py
+          git add engine_metadata.json 2>/dev/null || echo "No metadata found."
+          git add .github/workflows/nfl_meta_engine.yml 2>/dev/null || echo "No nfl_meta_engine.yml found."
+          git add profiles/*.json 2>/dev/null || echo "No profiles found yet."
+          git add data/state.json 2>/dev/null || echo "No state file found yet."
+          
+          # Check for changes and commit
+          if git diff --staged --quiet; then
+            echo "No changes detected by AI Architect."
+          else
+            git commit -m "AI SELF-HEALING: Total System Audit & Mathematical Repair [$(date)]"
+            git push origin main
+          fi
