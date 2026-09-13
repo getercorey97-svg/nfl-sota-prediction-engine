@@ -35,7 +35,7 @@ def dixon_coles_adjustment(home_goals, away_goals, rho, mu_x, mu_y):
     return 1.0
 
 class BacktestCalibrator:
-    def __init__(self, years=[2023, 2024, 2025]):
+    def __init__(self, years=[2023, 2024, 2025, 2026]):
         self.years = years
         self.engine = NFLMetaEngine()
         
@@ -56,10 +56,13 @@ class BacktestCalibrator:
         Slowly pulls extreme weights back toward 1.0 to prevent runaway compounding 
         errors during the backtest sequence.
         """
+        if team not in self.engine.state['team_params']: return
         params = self.engine.state['team_params'][team]
+        
+        # Bring weights slightly back toward baseline 1.0
         params['weight'] += (1.0 - params['weight']) * 0.02 
-        params['bias']['pass'] += (1.0 - params['bias']['pass']) * 0.02
-        params['bias']['rush'] += (1.0 - params['bias']['rush']) * 0.02
+        params['bias']['pass'] += (1.0 - params['bias'].get('pass', 1.0)) * 0.02
+        params['bias']['rush'] += (1.0 - params['bias'].get('rush', 1.0)) * 0.02
 
     def run_calibration(self):
         print(f"🚀 INITIALIZING BACKTEST CALIBRATION FOR SEASONS: {self.years}")
@@ -68,17 +71,22 @@ class BacktestCalibrator:
         sched = safe_load(['import_schedules', 'load_schedules'], self.years)
         weekly = safe_load(['import_weekly_data', 'load_weekly_data'], self.years)
         
+        if sched.empty or weekly.empty:
+            print("❌ Failed to load schedule or weekly data. Aborting.")
+            return
+
         sched.columns = sched.columns.str.lower()
         weekly.columns = weekly.columns.str.lower()
         
         sched['gametime_dt'] = pd.to_datetime(sched['gametime'], utc=True)
+        # CRITICAL: Sort chronologically to prevent compounding future data leaks
         sched = sched.sort_values('gametime_dt')
         
         score_col = find_col(sched, ['home_score', 'score_home'])
         sched = sched.dropna(subset=[score_col, 'away_score'])
         
         name_col = find_col(weekly, ['player_display_name', 'player_name'])
-        team_col_weekly = find_col(weekly, ['recent_team', 'team'])
+        team_col_weekly = find_col(weekly, ['recent_team', 'team', 'team_abbr'])
         
         for index, game in sched.iterrows():
             h_team = game['home_team']
@@ -92,17 +100,17 @@ class BacktestCalibrator:
             h_params = self.engine.state['team_params'].get(h_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             a_params = self.engine.state['team_params'].get(a_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             
-            # Factoring in motivation for late season backtests
+            # Factoring in motivation for late season backtests (Dec/Jan games)
             h_mot = h_params.get('motivation_index', 1.0) if game.get('week', 1) >= 14 else 1.0
             a_mot = a_params.get('motivation_index', 1.0) if game.get('week', 1) >= 14 else 1.0
             
             mu_home = 22.5 * h_params['weight'] * 1.05 * h_mot
             mu_away = 22.5 * a_params['weight'] * 0.95 * a_mot
             
-            pred_h_qb = 258 * h_params['weight'] * h_params['bias'].get('pass', 1.0)
-            pred_a_qb = 258 * a_params['weight'] * a_params['bias'].get('pass', 1.0)
-            pred_h_rb = 82 * h_params['weight'] * h_params['bias'].get('rush', 1.0)
-            pred_a_rb = 82 * a_params['weight'] * a_params['bias'].get('rush', 1.0)
+            pred_h_qb = 258 * h_params['weight'] * h_params['bias'].get('pass', 1.0) * h_mot
+            pred_a_qb = 258 * a_params['weight'] * a_params['bias'].get('pass', 1.0) * a_mot
+            pred_h_rb = 82 * h_params['weight'] * h_params['bias'].get('rush', 1.0) * h_mot
+            pred_a_rb = 82 * a_params['weight'] * a_params['bias'].get('rush', 1.0) * a_mot
             
             predicted_home_margin = mu_home - mu_away
             predicted_total = mu_home + mu_away
@@ -132,19 +140,20 @@ class BacktestCalibrator:
                 if (mu_home > implied_home) == (actual_home_score > implied_home):
                     self.metrics["team_over_under_correct"] += 1
             
-            h_qbs = weekly[(weekly[team_col_weekly] == h_team) & (weekly['week'] == game['week'])]
-            if not h_qbs.empty:
-                actual_h_qb = h_qbs['passing_yards'].max()
-                if not pd.isna(actual_h_qb):
-                    self.metrics["qb_errors"].append(abs(actual_h_qb - pred_h_qb))
-                    self.engine.self_correct(h_team, actual_h_qb, pred_h_qb, 'pass')
+            if team_col_weekly:
+                h_qbs = weekly[(weekly[team_col_weekly] == h_team) & (weekly['week'] == game['week'])]
+                if not h_qbs.empty and 'passing_yards' in h_qbs.columns:
+                    actual_h_qb = h_qbs['passing_yards'].max()
+                    if not pd.isna(actual_h_qb):
+                        self.metrics["qb_errors"].append(abs(actual_h_qb - pred_h_qb))
+                        self.engine.self_correct(h_team, actual_h_qb, pred_h_qb, 'pass')
 
-            a_rbs = weekly[(weekly[team_col_weekly] == a_team) & (weekly['week'] == game['week'])]
-            if not a_rbs.empty:
-                actual_a_rb = a_rbs['rushing_yards'].max()
-                if not pd.isna(actual_a_rb):
-                    self.metrics["rb_errors"].append(abs(actual_a_rb - pred_a_rb))
-                    self.engine.self_correct(a_team, actual_a_rb, pred_a_rb, 'rush')
+                a_rbs = weekly[(weekly[team_col_weekly] == a_team) & (weekly['week'] == game['week'])]
+                if not a_rbs.empty and 'rushing_yards' in a_rbs.columns:
+                    actual_a_rb = a_rbs['rushing_yards'].max()
+                    if not pd.isna(actual_a_rb):
+                        self.metrics["rb_errors"].append(abs(actual_a_rb - pred_a_rb))
+                        self.engine.self_correct(a_team, actual_a_rb, pred_a_rb, 'rush')
                     
             self.apply_drift_reduction(h_team)
             self.apply_drift_reduction(a_team)
@@ -173,12 +182,14 @@ class BacktestCalibrator:
         print(f"RB Rush Yds Expected Error: ±{rb_mae:.1f} yds")
         
         print("\n⚖️ DRIFT REDUCTION CHECK (Current Top 3 Team Weights):")
-        sorted_teams = sorted(self.engine.state['team_params'].items(), key=lambda x: x[1]['weight'], reverse=True)
-        for t, params in sorted_teams[:3]:
-            print(f"   {t}: {params['weight']:.3f} (Pass Bias: {params['bias']['pass']:.2f})")
+        if 'team_params' in self.engine.state:
+            sorted_teams = sorted(self.engine.state['team_params'].items(), key=lambda x: x[1].get('weight', 1.0), reverse=True)
+            for t, params in sorted_teams[:3]:
+                print(f"   {t}: {params.get('weight', 1.0):.3f} (Pass Bias: {params.get('bias', {}).get('pass', 1.0):.2f})")
             
         print("\n✅ CALIBRATION COMPLETE. State saved to engine_metadata.json.")
 
 if __name__ == "__main__":
-    calibrator = BacktestCalibrator(years=[2023, 2024, 2025])
+    # Updated to include 2026 so it captures week 1 data exactly up to today
+    calibrator = BacktestCalibrator(years=[2023, 2024, 2025, 2026])
     calibrator.run_calibration()
