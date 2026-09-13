@@ -1,37 +1,261 @@
 {
     "team_params": {
-        "ARI": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "ATL": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "BAL": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "BUF": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "CAR": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "CHI": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "CIN": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "CLE": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "DAL": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "DEN": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "DET": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "GB": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "HOU": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "IND": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "JAX": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "KC": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "LV": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "LAC": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "LAR": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "MIA": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "MIN": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "NE": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "NO": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "NYG": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "NYJ": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "PHI": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "PIT": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "SF": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "SEA": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "TB": {"lr": 0.05, "weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}},
-        "TEN": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}},
-        "WAS": {"lr": 0.05, "weight": 1.03, "bias": {"pass": 1.0, "rush": 1.0}}
+        "ARI": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "ATL": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "BAL": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "BUF": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "CAR": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "CHI": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "CIN": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "CLE": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "DAL": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "DEN": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "DET": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "GB": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "HOU": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "IND": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "JAX": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "KC": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "LV": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "LAC": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "LAR": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "MIA": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "MIN": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "NE": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "NO": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "NYG": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "NYJ": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "PHI": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "PIT": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "SF": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "SEA": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "TB": {
+            "lr": 0.05,
+            "weight": 1.0,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "TEN": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        },
+        "WAS": {
+            "lr": 0.05,
+            "weight": 1.03,
+            "bias": {
+                "pass": 1.0,
+                "rush": 1.0
+            }
+        }
     },
     "history": [
         {
