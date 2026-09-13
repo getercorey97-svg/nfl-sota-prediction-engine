@@ -44,6 +44,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes detected by AI Architect. System is optimal."
           else
-            git commit -m "AI SELF-HEALING: Universal System Audit & Code Repair [$(date)]"
+            git commit -m "AI SELF-HEALING: Universal System Audit & Code Repair [$(date -u +'%Y-%m-%d %H:%M') UTC]"
             git push origin main
           fi
