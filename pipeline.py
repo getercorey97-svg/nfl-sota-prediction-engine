@@ -3,19 +3,25 @@ import pandas as pd
 import numpy as np
 import datetime
 from brain import NFLMetaEngine
-from scipy.stats import poisson, norm, multivariate_normal
-from scipy.special import gammaln
+from scipy.stats import poisson, norm
 import warnings
 warnings.filterwarnings('ignore')
 
-def safe_load(func_list, *args, **kwargs):
-    """Safely loads data from multiple possible function names."""
-    for func in func_list:
-        if hasattr(nfl, func):
-            try:
-                data = getattr(nfl, func)(*args, **kwargs)
-                if isinstance(data, pd.DataFrame) and not data.empty: return data
-            except: continue
+def safe_load(func_list, years_list, *args, **kwargs):
+    """Safely loads data year-by-year to bypass HTTP 404s on missing seasons."""
+    all_data = []
+    for y in years_list:
+        for func in func_list:
+            if hasattr(nfl, func):
+                try:
+                    data = getattr(nfl, func)([y], *args, **kwargs)
+                    if isinstance(data, pd.DataFrame) and not data.empty: 
+                        all_data.append(data)
+                        break
+                except:
+                    continue
+    if all_data:
+        return pd.concat(all_data, ignore_index=True)
     return pd.DataFrame()
 
 def find_col(df, options):
@@ -109,6 +115,7 @@ def run_realtime_cycle():
         print("No games currently scheduled for today.")
         return
 
+    # Using the updated safe_load to fetch data individually by year
     depth = safe_load(['import_depth_charts', 'load_depth_charts'], [year])
     injuries = safe_load(['import_injuries', 'load_injuries'], [year])
     weekly_stats = safe_load(['import_weekly_data', 'load_weekly_data'], [year-1, year])
@@ -122,12 +129,9 @@ def run_realtime_cycle():
     name_col = find_col(weekly_stats, ['player_display_name', 'player_name', 'full_name'])
     team_col_depth = find_col(depth, ['club', 'team', 'team_abbr'])
     
-    # SCHEMA FIX: 'pos_rank' added
+    # SCHEMA FIX: 'pos_rank' added for the 2026 schema changes
     depth_rank_col = find_col(depth, ['depth_team', 'depth', 'depth_order', 'rank', 'pos_rank'])
     team_col_weekly = find_col(weekly_stats, ['recent_team', 'team', 'team_abbr'])
-    
-    # Injury status column
-    injury_status_col = find_col(injuries, ['report_status', 'status', 'game_status'])
     
     dc_rho = engine.state.get('model_params', {}).get('dixon_coles_rho', 0.13)
     qb_wr_rho = engine.state.get('model_params', {}).get('qb_wr_correlation', 0.45)
@@ -179,12 +183,12 @@ def run_realtime_cycle():
                     name_to_check = candidate.get(name_col_candidate, '') if name_col_candidate else ''
                     c_clean = clean_name(name_to_check)
                     
-                    if not injuries.empty and injury_status_col:
+                    if not injuries.empty:
                         injury_name_col = find_col(injuries, ['full_name', 'player_name', 'name'])
                         injury_team_col = find_col(injuries, ['team', 'club', 'team_abbr'])
                         if injury_name_col and injury_team_col:
                             p_injury = injuries[(injuries[injury_team_col] == team) & (injuries[injury_name_col].apply(clean_name) == c_clean)]
-                            if p_injury.empty or p_injury.iloc[0].get(injury_status_col, '').lower() not in ['out', 'inactive']:
+                            if p_injury.empty or p_injury.iloc[0].get('report_status', '').lower() not in ['out', 'inactive']:
                                 active_player = candidate
                                 break
                             else:
@@ -211,8 +215,7 @@ def run_realtime_cycle():
                         wr_preds.append((p_name, pred_yds))
                     
                     if is_final and not weekly_stats.empty:
-                        # Filter by week to get the correct game stats
-                        actual = weekly_stats[(weekly_stats[name_col].apply(clean_name) == clean_name(p_name)) & (weekly_stats[team_col_weekly] == team) & (weekly_stats['week'] == game['week'])]
+                        actual = weekly_stats[(weekly_stats[name_col].apply(clean_name) == clean_name(p_name)) & (weekly_stats[team_col_weekly] == team)]
                         if not actual.empty:
                             stat_map = {'QB': 'passing_yards', 'RB': 'rushing_yards', 'WR': 'receiving_yards', 'TE': 'receiving_yards'}
                             actual_yds = actual.iloc[0].get(stat_map[pos], 0)
