@@ -190,7 +190,9 @@ def run_realtime_cycle():
                         injury_team_col = find_col(injuries, ['team', 'club', 'team_abbr'])
                         if injury_name_col and injury_team_col:
                             p_injury = injuries[(injuries[injury_team_col] == team) & (injuries[injury_name_col].apply(clean_name) == c_clean)]
-                            if p_injury.empty or p_injury.iloc[0].get('report_status', '').lower() not in ['out', 'inactive']:
+                            
+                            # CRITICAL FIX: Wrap the get() result in str() to prevent NoneType attribute errors
+                            if p_injury.empty or str(p_injury.iloc[0].get('report_status', '')).lower() not in ['out', 'inactive']:
                                 active_player = candidate
                                 break
                             else:
