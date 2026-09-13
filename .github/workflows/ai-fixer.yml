@@ -16,7 +16,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 
-          # 👇 THIS IS THE NEW LINE YOU NEED 👇
           token: ${{ secrets.PAT_WORKFLOW }}
 
       - name: 🐍 Setup Python 3.11
@@ -38,17 +37,13 @@ jobs:
           git config --global user.name 'AI-System-Architect'
           git config --global user.email 'architect-bot@nfl.ai'
           
-          # SAFER ADD LOGIC: 
-          git add *.py
-          git add engine_metadata.json 2>/dev/null || echo "No metadata found."
-          git add .github/workflows/nfl_meta_engine.yml 2>/dev/null || echo "No nfl_meta_engine.yml found."
-          git add profiles/*.json 2>/dev/null || echo "No profiles found yet."
-          git add data/state.json 2>/dev/null || echo "No state file found yet."
+          # Dynamically add all modified/fixed files across the whole repo
+          git add -A
           
           # Check for changes and commit
           if git diff --staged --quiet; then
-            echo "No changes detected by AI Architect."
+            echo "No changes detected by AI Architect. System is optimal."
           else
-            git commit -m "AI SELF-HEALING: Total System Audit & Mathematical Repair [$(date)]"
+            git commit -m "AI SELF-HEALING: Universal System Audit & Code Repair [$(date)]"
             git push origin main
           fi
