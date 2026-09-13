@@ -50,19 +50,18 @@ class AIFixer:
             print("❌ Error: Context is empty. Exiting process.")
             return
 
+        # Prompt updated: Removed completed tasks to prevent unwanted regressions
         prompt = f"""
         You are the Lead Architect for a State-of-the-Art NFL Prediction Engine.
-        Review this entire multi-file system for mathematical truth, Python accuracy, JSON validity, and YAML workflow syntax.
+        Review this entire multi-file system for Python accuracy, JSON validity, and YAML workflow syntax.
         
         SYSTEM CONTEXT:
         {context}
         
         REQUIRED FIXES:
-        1. Ensure 'Dixon-Coles' Poisson math correctly models low-score dependencies.
-        2. Verify 'Gaussian Copula' correctly models correlations between QB and WR yards.
-        3. Apply 'The Geter Principle' (Biological Fatigue) to fatigue and travel variables.
-        4. Fix any syntax errors (e.g., ensuring stats functions use loc= and scale= keywords).
-        5. Verify GitHub Actions YAML syntax is correct and dependencies are properly configured.
+        1. CRITICAL FIX: In pipeline.py, resolve the "KeyError: 'position'" crash on the starters DataFrame. 
+        2. Standardize the columns in pipeline.py to lowercase before filtering, and add a fallback check to verify if 'position', 'pos', or similar keys exist in starters.columns to prevent fatal crashes if upstream data formatting changes.
+        3. Do NOT alter any existing predictive mathematics (Dixon-Coles, Copulas, etc.) as they are already calibrated and correct.
         
         OUTPUT INSTRUCTIONS:
         Return ONLY a JSON object where keys are the exact filenames provided in the context and values are the full corrected code/data.
