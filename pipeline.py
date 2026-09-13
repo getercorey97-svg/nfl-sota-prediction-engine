@@ -99,6 +99,8 @@ def run_realtime_cycle():
         print("Schedule data unavailable. Check year/API status.")
         return
         
+    # Standardize column names to lowercase across all dataframes
+    sched.columns = sched.columns.str.lower()
     sched['gametime_dt'] = pd.to_datetime(sched['gametime'], utc=True)
     
     # Look for games in a 24-hour window
@@ -116,7 +118,12 @@ def run_realtime_cycle():
     weekly_stats = safe_load(['import_weekly_data', 'load_weekly_data'], [year-1, year])
     seasonal_stats = safe_load(['import_seasonal_data', 'load_seasonal_data'], [year-1, year])
 
-    # Dynamic Column Mapping
+    # Standardize columns for all supporting dataframes
+    for df in [depth, injuries, weekly_stats, seasonal_stats]:
+        if not df.empty:
+            df.columns = df.columns.str.lower()
+
+    # Dynamic Column Mapping (now using lowercase options)
     score_col = find_col(sched, ['home_score', 'score_home', 'total_home_score'])
     name_col = find_col(weekly_stats, ['player_display_name', 'player_name', 'full_name'])
     team_col_depth = find_col(depth, ['club', 'team', 'team_abbr'])
@@ -162,28 +169,43 @@ def run_realtime_cycle():
                     print(f"    {pos} Data Missing for this team.")
                     continue
                     
-                pos_starters = starters[starters['position'] == pos]
+                # CRITICAL FIX: Dynamic position column detection with fallback
+                pos_col = find_col(starters, ['position', 'pos', 'position_group'])
+                if pos_col is None:
+                    print(f"    WARNING: No position column found in depth chart for {team}. Skipping {pos}.")
+                    continue
+                
+                pos_starters = starters[starters[pos_col] == pos]
                 active_player = None
                 
                 for i in range(len(pos_starters)):
                     candidate = pos_starters.iloc[i]
-                    name_to_check = candidate.get('full_name', candidate.get('player_name', ''))
+                    # Use dynamic name column detection
+                    name_col_candidate = find_col(pd.DataFrame([candidate]), ['full_name', 'player_name', 'name'])
+                    name_to_check = candidate.get(name_col_candidate, '') if name_col_candidate else ''
                     c_clean = clean_name(name_to_check)
                     
                     # Roster/Injury Verification
                     if not injuries.empty:
-                        p_injury = injuries[(injuries['team'] == team) & (injuries['full_name'].apply(clean_name) == c_clean)]
-                        if p_injury.empty or p_injury.iloc[0].get('report_status', '') not in ['Out', 'Inactive']:
+                        injury_name_col = find_col(injuries, ['full_name', 'player_name', 'name'])
+                        injury_team_col = find_col(injuries, ['team', 'club', 'team_abbr'])
+                        if injury_name_col and injury_team_col:
+                            p_injury = injuries[(injuries[injury_team_col] == team) & (injuries[injury_name_col].apply(clean_name) == c_clean)]
+                            if p_injury.empty or p_injury.iloc[0].get('report_status', '').lower() not in ['out', 'inactive']:
+                                active_player = candidate
+                                break
+                            else:
+                                print(f"    [OUT] {pos} {name_to_check} is scratched.")
+                        else:
                             active_player = candidate
                             break
-                        else:
-                            print(f"    [OUT] {pos} {name_to_check} is scratched.")
                     else:
                         active_player = candidate
                         break
 
                 if active_player is not None:
-                    p_name = active_player.get('full_name', active_player.get('player_name', 'Unknown'))
+                    name_col_active = find_col(pd.DataFrame([active_player]), ['full_name', 'player_name', 'name'])
+                    p_name = active_player.get(name_col_active, 'Unknown') if name_col_active else 'Unknown'
                     cat = 'pass' if pos in ['QB', 'WR', 'TE'] else 'rush'
                     b = params['bias'][cat]
                     
