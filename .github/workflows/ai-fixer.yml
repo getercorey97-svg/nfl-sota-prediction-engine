@@ -16,6 +16,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 
+          # 👇 THIS IS THE NEW LINE YOU NEED 👇
+          token: ${{ secrets.PAT_WORKFLOW }}
 
       - name: 🐍 Setup Python 3.11
         uses: actions/setup-python@v5
