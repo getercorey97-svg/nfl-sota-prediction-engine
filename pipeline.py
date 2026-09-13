@@ -43,48 +43,48 @@ def dixon_coles_adjustment(home_goals, away_goals, rho, mu_x, mu_y):
 
 def gaussian_copula_correlation(u, v, rho):
     """Gaussian Copula density for modeling QB-WR yard correlation."""
-    # Transform margins to standard normal
     z1 = norm.ppf(np.clip(u, 1e-10, 1-1e-10))
     z2 = norm.ppf(np.clip(v, 1e-10, 1-1e-10))
-    # Bivariate normal density with correlation rho
     denom = 2 * np.pi * np.sqrt(1 - rho**2)
     exponent = -(z1**2 - 2*rho*z1*z2 + z2**2) / (2 * (1 - rho**2))
     copula_density = np.exp(exponent) / denom
-    # Divide by product of standard normal densities
     return copula_density / (norm.pdf(z1) * norm.pdf(z2))
 
-def geter_fatigue_factor(team, schedule_row, weekly_stats, team_col_weekly, name_col):
-    """The Geter Principle: Biological fatigue from travel, short rest, and usage."""
-    fatigue = 1.0
+def geter_context_factor(team, schedule_row, weekly_stats, team_col_weekly, name_col, engine_state):
+    """
+    The Geter Principle 2.0: Maps physical fatigue alongside Time-of-Season Motivation.
+    """
+    context_multiplier = 1.0
     
-    # Travel fatigue: timezone changes
+    # 1. TRAVEL FATIGUE
     tz_map = {
-        'BUF': -5, 'MIA': -5, 'NE': -5, 'NYJ': -5,
-        'BAL': -5, 'CIN': -5, 'CLE': -5, 'PIT': -5,
-        'HOU': -6, 'IND': -5, 'JAX': -5, 'TEN': -6,
-        'DEN': -7, 'KC': -6, 'LV': -8, 'LAC': -8,
-        'DAL': -6, 'NYG': -5, 'PHI': -5, 'WAS': -5,
-        'CHI': -6, 'DET': -5, 'GB': -6, 'MIN': -6,
-        'ATL': -5, 'CAR': -5, 'NO': -6, 'TB': -5,
-        'ARI': -7, 'LAR': -8, 'SF': -8, 'SEA': -8
+        'BUF':-5, 'MIA':-5, 'NE':-5, 'NYJ':-5, 'BAL':-5, 'CIN':-5, 'CLE':-5, 'PIT':-5, 
+        'HOU':-6, 'IND':-5, 'JAX':-5, 'TEN':-6, 'DEN':-7, 'KC':-6, 'LV':-8, 'LAC':-8, 
+        'DAL':-6, 'NYG':-5, 'PHI':-5, 'WAS':-5, 'CHI':-6, 'DET':-5, 'GB':-6, 'MIN':-6, 
+        'ATL':-5, 'CAR':-5, 'NO':-6, 'TB':-5, 'ARI':-7, 'LAR':-8, 'SF':-8, 'SEA':-8
     }
     home_tz = tz_map.get(schedule_row['home_team'], -5)
     away_tz = tz_map.get(schedule_row['away_team'], -5)
-    tz_diff = abs(home_tz - away_tz)
-    if tz_diff >= 3:
-        fatigue *= 0.97  # 3% degradation per 3 time zones
+    if abs(home_tz - away_tz) >= 3:
+        context_multiplier *= 0.97
+        
+    # 2. TIME OF SEASON & MOTIVATION MAPPING
+    current_week = schedule_row.get('week', 1)
     
-    # Short rest: days since last game
-    # This would need schedule history; simplified here
+    # Only apply motivation adjustments late in the season (Week 14 onwards)
+    if current_week >= 14:
+        # Fetch the historical 5-year motivation index calculated in the seed
+        team_motivation = engine_state['team_params'].get(team, {}).get('motivation_index', 1.0)
+        
+        # Scale the motivation impact based on how late it is in the season.
+        # Week 14 applies 20% of the trait, Week 18 applies 100% of the trait.
+        lateness_scale = min(1.0, (current_week - 13) / 5.0) 
+        
+        # Apply the weighted motivation to the context multiplier
+        active_motivation = 1.0 + ((team_motivation - 1.0) * lateness_scale)
+        context_multiplier *= active_motivation
     
-    # Usage fatigue: high snap counts previous week
-    if not weekly_stats.empty and team_col_weekly and name_col:
-        recent = weekly_stats[weekly_stats[team_col_weekly] == team].tail(1)
-        if not recent.empty:
-            # High usage players degrade
-            pass
-    
-    return max(0.85, min(1.0, fatigue))
+    return max(0.80, min(1.20, context_multiplier))
 
 def run_realtime_cycle():
     engine = NFLMetaEngine()
@@ -93,17 +93,14 @@ def run_realtime_cycle():
     
     print(f"--- NFL SOTA ENGINE START: {now_utc.strftime('%Y-%m-%d %H:%M')} UTC ---")
     
-    # 1. Pull Core Factual Data
     sched = safe_load(['import_schedules', 'load_schedules'], [year])
     if sched.empty:
         print("Schedule data unavailable. Check year/API status.")
         return
         
-    # Standardize column names to lowercase across all dataframes
     sched.columns = sched.columns.str.lower()
     sched['gametime_dt'] = pd.to_datetime(sched['gametime'], utc=True)
     
-    # Look for games in a 24-hour window
     window_start = now_utc - datetime.timedelta(hours=18)
     window_end = now_utc + datetime.timedelta(hours=6)
     active_games = sched[(sched['gametime_dt'] >= window_start) & (sched['gametime_dt'] <= window_end)]
@@ -112,30 +109,24 @@ def run_realtime_cycle():
         print("No games currently scheduled for today.")
         return
 
-    # Fetch Supporting Data
     depth = safe_load(['import_depth_charts', 'load_depth_charts'], [year])
     injuries = safe_load(['import_injuries', 'load_injuries'], [year])
     weekly_stats = safe_load(['import_weekly_data', 'load_weekly_data'], [year-1, year])
     seasonal_stats = safe_load(['import_seasonal_data', 'load_seasonal_data'], [year-1, year])
 
-    # Standardize columns for all supporting dataframes
     for df in [depth, injuries, weekly_stats, seasonal_stats]:
         if not df.empty:
             df.columns = df.columns.str.lower()
 
-    # Dynamic Column Mapping (now using lowercase options)
     score_col = find_col(sched, ['home_score', 'score_home', 'total_home_score'])
     name_col = find_col(weekly_stats, ['player_display_name', 'player_name', 'full_name'])
     team_col_depth = find_col(depth, ['club', 'team', 'team_abbr'])
     
-    # CRITICAL FIX 1: Added 'pos_rank' to handle new depth chart hierarchy schema
+    # SCHEMA FIX: 'pos_rank' added
     depth_rank_col = find_col(depth, ['depth_team', 'depth', 'depth_order', 'rank', 'pos_rank'])
-    
     team_col_weekly = find_col(weekly_stats, ['recent_team', 'team', 'team_abbr'])
     
-    # Dixon-Coles rho parameter (estimated from historical data)
     dc_rho = engine.state.get('model_params', {}).get('dixon_coles_rho', 0.13)
-    # Gaussian Copula correlation for QB-WR stacks
     qb_wr_rho = engine.state.get('model_params', {}).get('qb_wr_correlation', 0.45)
 
     for _, game in active_games.iterrows():
@@ -148,7 +139,6 @@ def run_realtime_cycle():
         for team in [a_team, h_team]:
             params = engine.state['team_params'].get(team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             
-            # Identify Starters with fallback sorting
             if team_col_depth and not depth.empty:
                 team_roster = depth[depth[team_col_depth] == team]
                 if depth_rank_col:
@@ -160,10 +150,9 @@ def run_realtime_cycle():
 
             print(f"  > {team} (Intelligence Weight: {params['weight']:.2f})")
             
-            # Apply Geter Principle fatigue
-            fatigue = geter_fatigue_factor(team, game, weekly_stats, team_col_weekly, name_col)
+            # Applying the new Context/Motivation logic
+            fatigue = geter_context_factor(team, game, weekly_stats, team_col_weekly, name_col, engine.state)
             
-            # Collect QB and WR predictions for copula
             qb_pred = None
             wr_preds = []
             
@@ -172,7 +161,7 @@ def run_realtime_cycle():
                     print(f"    {pos} Data Missing for this team.")
                     continue
                     
-                # CRITICAL FIX 2: Added 'pos_abb' and 'pos_name' to handle new position mapping schema
+                # SCHEMA FIX: 'pos_abb', 'pos_name' added
                 pos_col = find_col(starters, ['position', 'pos', 'position_group', 'pos_abb', 'pos_name'])
                 if pos_col is None:
                     print(f"    WARNING: No position column found in depth chart for {team}. Skipping {pos}.")
@@ -183,12 +172,10 @@ def run_realtime_cycle():
                 
                 for i in range(len(pos_starters)):
                     candidate = pos_starters.iloc[i]
-                    # Use dynamic name column detection
                     name_col_candidate = find_col(pd.DataFrame([candidate]), ['full_name', 'player_name', 'name'])
                     name_to_check = candidate.get(name_col_candidate, '') if name_col_candidate else ''
                     c_clean = clean_name(name_to_check)
                     
-                    # Roster/Injury Verification
                     if not injuries.empty:
                         injury_name_col = find_col(injuries, ['full_name', 'player_name', 'name'])
                         injury_team_col = find_col(injuries, ['team', 'club', 'team_abbr'])
@@ -210,9 +197,8 @@ def run_realtime_cycle():
                     name_col_active = find_col(pd.DataFrame([active_player]), ['full_name', 'player_name', 'name'])
                     p_name = active_player.get(name_col_active, 'Unknown') if name_col_active else 'Unknown'
                     cat = 'pass' if pos in ['QB', 'WR', 'TE'] else 'rush'
-                    b = params['bias'][cat]
+                    b = params['bias'].get(cat, 1.0)
                     
-                    # Base projections with fatigue
                     base_yds = {'QB': 258, 'RB': 82, 'WR': 88, 'TE': 55}[pos]
                     pred_yds = base_yds * params['weight'] * b * fatigue
                     
@@ -222,48 +208,38 @@ def run_realtime_cycle():
                         wr_preds.append((p_name, pred_yds))
                     
                     if is_final and not weekly_stats.empty:
-                        # ACTUALS LEARNING MODE
                         actual = weekly_stats[(weekly_stats[name_col].apply(clean_name) == clean_name(p_name)) & (weekly_stats[team_col_weekly] == team)]
                         if not actual.empty:
                             stat_map = {'QB': 'passing_yards', 'RB': 'rushing_yards', 'WR': 'receiving_yards', 'TE': 'receiving_yards'}
                             actual_yds = actual.iloc[0].get(stat_map[pos], 0)
-                            print(f"    {pos} {p_name}: Predicted {pred_yds:.1f} | Actual {actual_yds:.1f} (Fatigue: {fatigue:.2f})")
+                            print(f"    {pos} {p_name}: Predicted {pred_yds:.1f} | Actual {actual_yds:.1f} (Context: {fatigue:.2f})")
                             engine.self_correct(team, actual_yds, pred_yds, cat)
                     else:
-                        # PREDICTION MODE with Copula-adjusted WR projections
                         label = {"QB": "Pass Yds", "RB": "Rush Yds", "WR": "Rec Yds", "TE": "Rec Yds"}[pos]
                         
-                        # Apply Gaussian Copula for QB-WR correlation
                         if pos in ['WR', 'TE'] and qb_pred is not None:
-                            # Transform predictions to uniform margins via CDF
-                            # Using lognormal approximation for yards
-                            qb_mu, qb_sigma = np.log(qb_pred), 0.35
-                            wr_mu, wr_sigma = np.log(pred_yds), 0.45
-                            u = norm.cdf((np.log(pred_yds) - wr_mu) / wr_sigma)
-                            v = norm.cdf((np.log(qb_pred) - qb_mu) / qb_sigma)
+                            qb_mu, qb_sigma = np.log(max(qb_pred, 1)), 0.35
+                            wr_mu, wr_sigma = np.log(max(pred_yds, 1)), 0.45
+                            u = norm.cdf((np.log(max(pred_yds, 1)) - wr_mu) / wr_sigma)
+                            v = norm.cdf((np.log(max(qb_pred, 1)) - qb_mu) / qb_sigma)
                             copula_adj = gaussian_copula_correlation(u, v, qb_wr_rho)
-                            pred_yds *= (0.8 + 0.4 * copula_adj)  # Blend adjustment
+                            pred_yds *= (0.8 + 0.4 * copula_adj)
                         
-                        print(f"    {pos} {p_name}: {pred_yds:.1f} {label} (Fatigue: {fatigue:.2f})")
+                        print(f"    {pos} {p_name}: {pred_yds:.1f} {label} (Context: {fatigue:.2f})")
             
-            # Team-level score prediction using Dixon-Coles adjusted Poisson
             if not is_final:
-                # Estimate team scoring rates from player projections
                 off_weight = params['weight']
                 home_adv = 1.05 if team == h_team else 0.95
-                mu = 22.5 * off_weight * home_adv * fatigue  # Base 22.5 pts/game
+                mu = 22.5 * off_weight * home_adv * fatigue
                 
-                # Store for game-level prediction
                 if 'team_mus' not in locals():
                     team_mus = {}
                 team_mus[team] = mu
         
-        # Game-level prediction with Dixon-Coles
         if not is_final and 'team_mus' in locals() and len(team_mus) == 2:
             mu_home = team_mus.get(h_team, 22.5)
             mu_away = team_mus.get(a_team, 22.5)
             
-            # Calculate win probabilities with Dixon-Coles adjustment
             max_score = 50
             home_win = away_win = tie = 0.0
             for hg in range(max_score):
@@ -279,7 +255,6 @@ def run_realtime_cycle():
             print(f"  >>> Game Prediction: {h_team} {mu_home:.1f} - {mu_away:.1f} {a_team}")
             print(f"  >>> Win Prob: {h_team} {home_win:.1%} | {a_team} {away_win:.1%} | Tie {tie:.1%}")
             
-            # Clean up for next game
             del team_mus
 
     engine.save_state()
