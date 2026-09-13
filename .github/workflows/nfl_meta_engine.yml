@@ -1,7 +1,7 @@
 name: NFL SOTA Live Engine
 on:
   schedule:
-    - cron: '*/30 * * * *' # Every 30 minutes
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -11,22 +11,36 @@ jobs:
       contents: write
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
-      - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/checkout@v4
         with:
-          python-version: '3.10'
-          cache: 'pip' # Speeds up future runs
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
       - name: Run Engine
         run: python pipeline.py
+        env:
+          PYTHONPATH: ${{ github.workspace }}
       - name: Commit Intelligence
         run: |
           git config --global user.name 'SOTA-Live-Bot'
           git config --global user.email 'bot@nfl-sota.com'
           git add engine_metadata.json
-          git commit -m "Live Update: Roster/Injury Check [$(date)]" || echo "No changes"
+          git diff --staged --quiet || git commit -m "Live Update: Roster/Injury Check [$(date -u +'%Y-%m-%d %H:%M') UTC]"
           git push
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-logs
+          path: |
+            engine_metadata.json
+          retention-days: 7
