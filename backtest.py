@@ -9,13 +9,21 @@ from scipy.stats import poisson, norm
 import warnings
 warnings.filterwarnings('ignore')
 
-def safe_load(func_list, *args, **kwargs):
-    for func in func_list:
-        if hasattr(nfl, func):
-            try:
-                data = getattr(nfl, func)(*args, **kwargs)
-                if isinstance(data, pd.DataFrame) and not data.empty: return data
-            except: continue
+def safe_load(func_list, years_list, *args, **kwargs):
+    """Safely loads data year-by-year to bypass HTTP 404s on missing seasons."""
+    all_data = []
+    for y in years_list:
+        for func in func_list:
+            if hasattr(nfl, func):
+                try:
+                    data = getattr(nfl, func)([y], *args, **kwargs)
+                    if isinstance(data, pd.DataFrame) and not data.empty: 
+                        all_data.append(data)
+                        break
+                except:
+                    continue
+    if all_data:
+        return pd.concat(all_data, ignore_index=True)
     return pd.DataFrame()
 
 def find_col(df, options):
@@ -51,11 +59,6 @@ class BacktestCalibrator:
         }
         
     def apply_drift_reduction(self, team):
-        """
-        Anti-Hallucination Mechanism: Mean Reversion.
-        Slowly pulls extreme weights back toward 1.0 to prevent runaway compounding 
-        errors during the backtest sequence.
-        """
         if team not in self.engine.state['team_params']: return
         params = self.engine.state['team_params'][team]
         
@@ -67,7 +70,7 @@ class BacktestCalibrator:
     def run_calibration(self):
         print(f"🚀 INITIALIZING BACKTEST CALIBRATION FOR SEASONS: {self.years}")
         
-        print("📥 Loading historical data (this may take a moment)...")
+        print("📥 Loading historical data (bypassing 404 missing years)...")
         sched = safe_load(['import_schedules', 'load_schedules'], self.years)
         weekly = safe_load(['import_weekly_data', 'load_weekly_data'], self.years)
         
@@ -79,15 +82,10 @@ class BacktestCalibrator:
         weekly.columns = weekly.columns.str.lower()
         
         sched['gametime_dt'] = pd.to_datetime(sched['gametime'], utc=True)
-        # CRITICAL: Sort chronologically to prevent compounding future data leaks
         sched = sched.sort_values('gametime_dt')
         
         score_col = find_col(sched, ['home_score', 'score_home'])
         sched = sched.dropna(subset=[score_col, 'away_score'])
-        
-        # Find vegas columns dynamically
-        spread_col = find_col(sched, ['spread_line', 'spread'])
-        total_col = find_col(sched, ['total_line', 'total'])
         
         name_col = find_col(weekly, ['player_display_name', 'player_name'])
         team_col_weekly = find_col(weekly, ['recent_team', 'team', 'team_abbr'])
@@ -98,13 +96,12 @@ class BacktestCalibrator:
             
             actual_home_score = game[score_col]
             actual_away_score = game['away_score']
-            vegas_spread = game.get(spread_col, 0) if spread_col else 0
-            vegas_total = game.get(total_col, 45.0) if total_col else 45.0
+            vegas_spread = game.get('spread_line', 0)
+            vegas_total = game.get('total_line', 45.0)
             
             h_params = self.engine.state['team_params'].get(h_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             a_params = self.engine.state['team_params'].get(a_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             
-            # Factoring in motivation for late season backtests (Dec/Jan games)
             h_mot = h_params.get('motivation_index', 1.0) if game.get('week', 1) >= 14 else 1.0
             a_mot = a_params.get('motivation_index', 1.0) if game.get('week', 1) >= 14 else 1.0
             
@@ -194,6 +191,5 @@ class BacktestCalibrator:
         print("\n✅ CALIBRATION COMPLETE. State saved to engine_metadata.json.")
 
 if __name__ == "__main__":
-    # Updated to include 2026 so it captures week 1 data exactly up to today
     calibrator = BacktestCalibrator(years=[2023, 2024, 2025, 2026])
     calibrator.run_calibration()
