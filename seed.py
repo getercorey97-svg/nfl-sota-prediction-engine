@@ -6,6 +6,19 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
+def find_col(df, options):
+    """Dynamically finds the correct column name from a list of possibilities."""
+    for opt in options:
+        if opt in df.columns:
+            return opt
+    return None
+
+def clean_name(name):
+    """Normalizes names to ensure accurate cross-referencing."""
+    if not name:
+        return ""
+    return str(name).lower().replace(".", "").replace(" jr", "").replace(" iii", "").strip()
+
 def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
     """
     Seeds the engine using 5 years of weighted historical data.
@@ -15,8 +28,19 @@ def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
     
     print("📥 Fetching schedules and weekly stats (this will take a moment)...")
     sched = nfl.import_schedules(years)
-    sched = sched.dropna(subset=['home_score', 'away_score'])
     weekly = nfl.import_weekly_data(years)
+    
+    # Standardize columns to lowercase
+    sched.columns = sched.columns.str.lower()
+    weekly.columns = weekly.columns.str.lower()
+    
+    # Drop games without scores
+    sched = sched.dropna(subset=['home_score', 'away_score'])
+    
+    # Find the team column in weekly data (could be 'recent_team', 'team', etc.)
+    team_col_weekly = find_col(weekly, ['recent_team', 'team', 'team_abbr'])
+    if not team_col_weekly:
+        raise ValueError("Could not find team column in weekly data")
     
     team_data = {}
     
@@ -27,8 +51,8 @@ def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
         yr_weekly = weekly[weekly['season'] == year]
         
         lg_ppg = (yr_sched['home_score'].mean() + yr_sched['away_score'].mean()) / 2
-        lg_pass = yr_weekly.groupby('recent_team')['passing_yards'].sum().mean()
-        lg_rush = yr_weekly.groupby('recent_team')['rushing_yards'].sum().mean()
+        lg_pass = yr_weekly.groupby(team_col_weekly)['passing_yards'].sum().mean()
+        lg_rush = yr_weekly.groupby(team_col_weekly)['rushing_yards'].sum().mean()
         
         for team in yr_sched['home_team'].unique():
             if team not in team_data:
@@ -43,7 +67,7 @@ def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
             t_pts = t_games.apply(lambda r: r['home_score'] if r['home_team'] == team else r['away_score'], axis=1)
             t_ppg = t_pts.mean()
             
-            t_wk = yr_weekly[yr_weekly['recent_team'] == team]
+            t_wk = yr_weekly[yr_weekly[team_col_weekly] == team]
             t_pass = t_wk['passing_yards'].sum()
             t_rush = t_wk['rushing_yards'].sum()
             
@@ -57,6 +81,8 @@ def seed_engine_5_year(years=[2021, 2022, 2023, 2024, 2025]):
             team_data[team]['weighted_ppg_ratio'] += (t_ppg / lg_ppg) * yr_weight
             team_data[team]['weighted_pass_ratio'] += (t_pass / max(lg_pass, 1)) * yr_weight
             team_data[team]['weighted_rush_ratio'] += (t_rush / max(lg_rush, 1)) * yr_weight
+            
+            # Handle NaN for early/late splits (if no games in that split)
             team_data[team]['early_ppg'] += (np.nan_to_num(e_pts) * yr_weight)
             team_data[team]['late_ppg'] += (np.nan_to_num(l_pts) * yr_weight)
             team_data[team]['total_weight'] += yr_weight

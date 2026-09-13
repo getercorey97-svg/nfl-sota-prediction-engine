@@ -126,6 +126,9 @@ def run_realtime_cycle():
     depth_rank_col = find_col(depth, ['depth_team', 'depth', 'depth_order', 'rank', 'pos_rank'])
     team_col_weekly = find_col(weekly_stats, ['recent_team', 'team', 'team_abbr'])
     
+    # Injury status column
+    injury_status_col = find_col(injuries, ['report_status', 'status', 'game_status'])
+    
     dc_rho = engine.state.get('model_params', {}).get('dixon_coles_rho', 0.13)
     qb_wr_rho = engine.state.get('model_params', {}).get('qb_wr_correlation', 0.45)
 
@@ -176,12 +179,12 @@ def run_realtime_cycle():
                     name_to_check = candidate.get(name_col_candidate, '') if name_col_candidate else ''
                     c_clean = clean_name(name_to_check)
                     
-                    if not injuries.empty:
+                    if not injuries.empty and injury_status_col:
                         injury_name_col = find_col(injuries, ['full_name', 'player_name', 'name'])
                         injury_team_col = find_col(injuries, ['team', 'club', 'team_abbr'])
                         if injury_name_col and injury_team_col:
                             p_injury = injuries[(injuries[injury_team_col] == team) & (injuries[injury_name_col].apply(clean_name) == c_clean)]
-                            if p_injury.empty or p_injury.iloc[0].get('report_status', '').lower() not in ['out', 'inactive']:
+                            if p_injury.empty or p_injury.iloc[0].get(injury_status_col, '').lower() not in ['out', 'inactive']:
                                 active_player = candidate
                                 break
                             else:
@@ -208,7 +211,8 @@ def run_realtime_cycle():
                         wr_preds.append((p_name, pred_yds))
                     
                     if is_final and not weekly_stats.empty:
-                        actual = weekly_stats[(weekly_stats[name_col].apply(clean_name) == clean_name(p_name)) & (weekly_stats[team_col_weekly] == team)]
+                        # Filter by week to get the correct game stats
+                        actual = weekly_stats[(weekly_stats[name_col].apply(clean_name) == clean_name(p_name)) & (weekly_stats[team_col_weekly] == team) & (weekly_stats['week'] == game['week'])]
                         if not actual.empty:
                             stat_map = {'QB': 'passing_yards', 'RB': 'rushing_yards', 'WR': 'receiving_yards', 'TE': 'receiving_yards'}
                             actual_yds = actual.iloc[0].get(stat_map[pos], 0)

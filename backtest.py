@@ -85,6 +85,10 @@ class BacktestCalibrator:
         score_col = find_col(sched, ['home_score', 'score_home'])
         sched = sched.dropna(subset=[score_col, 'away_score'])
         
+        # Find vegas columns dynamically
+        spread_col = find_col(sched, ['spread_line', 'spread'])
+        total_col = find_col(sched, ['total_line', 'total'])
+        
         name_col = find_col(weekly, ['player_display_name', 'player_name'])
         team_col_weekly = find_col(weekly, ['recent_team', 'team', 'team_abbr'])
         
@@ -94,8 +98,8 @@ class BacktestCalibrator:
             
             actual_home_score = game[score_col]
             actual_away_score = game['away_score']
-            vegas_spread = game.get('spread_line', 0)
-            vegas_total = game.get('total_line', 45.0)
+            vegas_spread = game.get(spread_col, 0) if spread_col else 0
+            vegas_total = game.get(total_col, 45.0) if total_col else 45.0
             
             h_params = self.engine.state['team_params'].get(h_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             a_params = self.engine.state['team_params'].get(a_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
