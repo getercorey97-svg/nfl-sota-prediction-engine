@@ -146,7 +146,7 @@ def run_realtime_cycle():
         print(f"\n[{status}] {a_team} @ {h_team}")
 
         for team in [a_team, h_team]:
-            params = engine.state['team_params'].get(team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})\n
+            params = engine.state['team_params'].get(team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             if team_col_depth and not depth.empty:
                 team_roster = depth[depth[team_col_depth] == team]
                 if depth_rank_col:
