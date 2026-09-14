@@ -11,16 +11,19 @@ def safe_load(func_list, years_list):
     all_data = []
     for y in years_list:
         print(f"  Attempting to load data for {y}...")
+        year_success = False
         for func in func_list:
             if hasattr(nfl, func):
                 try:
                     data = getattr(nfl, func)([y])
                     if isinstance(data, pd.DataFrame) and not data.empty:
                         all_data.append(data)
+                        year_success = True
                         break
                 except Exception:
-                    print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")
                     continue
+        if not year_success:
+            print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")
     if all_data:
         return pd.concat(all_data, ignore_index=True)
     return pd.DataFrame()

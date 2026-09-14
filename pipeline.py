@@ -11,15 +11,19 @@ def safe_load(func_list, years_list):
     """Safely loads data year-by-year to bypass HTTP 404s on missing seasons."""
     all_data = []
     for y in years_list:
+        year_success = False
         for func in func_list:
             if hasattr(nfl, func):
                 try:
                     data = getattr(nfl, func)([y])
                     if isinstance(data, pd.DataFrame) and not data.empty:
                         all_data.append(data)
+                        year_success = True
                         break
                 except Exception:
                     continue
+        if not year_success:
+            print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")
     if all_data:
         return pd.concat(all_data, ignore_index=True)
     return pd.DataFrame()
