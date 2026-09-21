@@ -20,7 +20,8 @@ def safe_load(func_list, years_list):
                         all_data.append(data)
                         year_success = True
                         break
-                except Exception:
+                except Exception as e:
+                    print(f"    ⚠️ Warning: {y} data fetch failed for {func}: {e}. Trying next...")
                     continue
         if not year_success:
             print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")

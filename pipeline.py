@@ -20,7 +20,8 @@ def safe_load(func_list, years_list):
                         all_data.append(data)
                         year_success = True
                         break
-                except Exception:
+                except Exception as e:
+                    print(f"    ⚠️ Warning: {y} data fetch failed for {func}: {e}. Trying next...")
                     continue
         if not year_success:
             print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")
@@ -62,7 +63,7 @@ def gaussian_copula_correlation(u, v, rho):
     copula_density = np.exp(exponent) / denom
     return copula_density / (norm.pdf(z1) * norm.pdf(z2))
 
-def geter_context_factor(team, schedule_row, weekly_stats, team_col_weekly, name_col, engine_state):
+def get_realtime_context_factor(team, schedule_row, weekly_stats, team_col_weekly, name_col, engine_state):
     """
     The Geter Principle 2.0: Maps physical fatigue alongside Time-of-Season Motivation.
     """
@@ -149,6 +150,8 @@ def run_realtime_cycle():
 
         print(f"\n[{status}] {a_team} @ {h_team}")
 
+        team_mus = {}
+        
         for team in [a_team, h_team]:
             params = engine.state['team_params'].get(team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             if team_col_depth and not depth.empty:
@@ -162,9 +165,8 @@ def run_realtime_cycle():
 
             print(f"  > {team} (Intelligence Weight: {params['weight']:.2f})")
 
-            # Applying the new Context/Motvation logic
-            fatigue = get_realtime_context_factor(team, game, weekly_stats, team_col_weekly, name_col, engine.state) \
-                if 'get_realtime_context_factor' in globals() else geter_context_factor(team, game, weekly_stats, team_col_weekly, name_col, engine.state)
+            # Applying the Context/Motivation logic
+            fatigue = get_realtime_context_factor(team, game, weekly_stats, team_col_weekly, name_col, engine.state)
 
             qb_pred = None
             wr_preds = []
@@ -241,17 +243,15 @@ def run_realtime_cycle():
                             pred_yds *= (0.8 + 0.4 * copula_adj)
 
                         print(f"    {pos} {p_name}: {pred_yds:.1f} {label} (Context: {fatigue:.2f})")
-
+            
+            # Compute team mu for game prediction
             if not is_final:
                 off_weight = params['weight']
                 home_adv = 1.05 if team == h_team else 0.95
                 mu = 22.5 * off_weight * home_adv * fatigue
-
-                if 'team_mus' not in locals():
-                    team_mus = {}
                 team_mus[team] = mu
 
-        if not is_final and 'team_mus' in locals() and len(team_mus) == 2:
+        if not is_final and len(team_mus) == 2:
             mu_home = team_mus.get(h_team, 22.5)
             mu_away = team_mus.get(a_team, 22.5)
 
@@ -272,8 +272,6 @@ def run_realtime_cycle():
 
             print(f"  >>> Game Prediction: {h_team} {mu_home:.1f} - {mu_away:.1f} {a_team}")
             print(f"  >>> Win Prob: {h_team} {home_win:.1%} | {a_team} {away_win:.1%} | Tie {tie:.1%}")
-
-            del team_mus
 
     engine.save_state()
     print("\n--- CYCLE COMPLETE: ALL INTELLIGENCE SYNCED ---")
