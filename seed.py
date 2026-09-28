@@ -21,8 +21,14 @@ def safe_load(func_list, years_list):
                         year_success = True
                         break
                 except Exception as e:
-                    print(f"    ⚠️ Warning: {y} data fetch failed for {func}: {e}. Trying next...")
+                    error_str = str(e)
+                    if '404' in error_str:
+                        print(f"    ⚠️ Warning: {y} data fetch failed for {func}: HTTP 404. Trying next...")
+                    else:
+                        print(f"    ⚠️ Warning: {y} data fetch failed for {func}: {e}. Trying next...")
                     continue
+            else:
+                print(f"    ⚠️ Warning: {func} not found in nfl_data_py namespace. Trying next...")
         if not year_success:
             print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")
     if all_data:

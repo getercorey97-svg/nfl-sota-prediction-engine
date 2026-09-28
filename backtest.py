@@ -13,6 +13,7 @@ def safe_load(func_list, years_list):
     """Safely loads data year-by-year to bypass HTTP 404s on missing seasons."""
     all_data = []
     for y in years_list:
+        print(f"  Attempting to load data for {y}...")
         year_success = False
         for func in func_list:
             if hasattr(nfl, func):
@@ -23,8 +24,14 @@ def safe_load(func_list, years_list):
                         year_success = True
                         break
                 except Exception as e:
-                    print(f"    ⚠️ Warning: {y} data fetch failed for {func}: {e}. Trying next...")
+                    error_str = str(e)
+                    if '404' in error_str:
+                        print(f"    ⚠️ Warning: {y} data fetch failed for {func}: HTTP 404. Trying next...")
+                    else:
+                        print(f"    ⚠️ Warning: {y} data fetch failed for {func}: {e}. Trying next...")
                     continue
+            else:
+                print(f"    ⚠️ Warning: {func} not found in nfl_data_py namespace. Trying next...")
         if not year_success:
             print(f"    ⚠️ Warning: {y} data not found (HTTP 404). Skipping...")
     if all_data:
@@ -107,6 +114,7 @@ class BacktestCalibrator:
 
         name_col = find_col(weekly, ['player_display_name', 'player_name'])
         team_col_weekly = find_col(weekly, ['recent_team', 'team', 'team_abbr'])
+        week_col = find_col(sched, ['week', 'week_num', 'game_week'])
 
         for index, game in sched.iterrows():
             h_team = game['home_team']
@@ -120,8 +128,9 @@ class BacktestCalibrator:
             h_params = self.engine.state['team_params'].get(h_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
             a_params = self.engine.state['team_params'].get(a_team, {"weight": 1.0, "bias": {"pass": 1.0, "rush": 1.0}})
 
-            h_mot = h_params.get('motivation_index', 1.0) if game.get('week', 1) >= 14 else 1.0
-            a_mot = a_params.get('motivation_index', 1.0) if game.get('week', 1) >= 14 else 1.0
+            game_week = game.get(week_col, 1) if week_col else 1
+            h_mot = h_params.get('motivation_index', 1.0) if game_week >= 14 else 1.0
+            a_mot = a_params.get('motivation_index', 1.0) if game_week >= 14 else 1.0
 
             mu_home = 22.5 * h_params['weight'] * 1.05 * h_mot
             mu_away = 22.5 * a_params['weight'] * 0.95 * a_mot
@@ -159,15 +168,15 @@ class BacktestCalibrator:
                 if (mu_home > implied_home) == (actual_home_score > implied_home):
                     self.metrics["team_over_under_correct"] += 1
 
-            if team_col_weekly:
-                h_qbs = weekly[(weekly[team_col_weekly] == h_team) & (weekly['week'] == game['week'])]
+            if team_col_weekly and week_col:
+                h_qbs = weekly[(weekly[team_col_weekly] == h_team) & (weekly[week_col] == game_week)]
                 if not h_qbs.empty and 'passing_yards' in h_qbs.columns:
                     actual_h_qb = h_qbs['passing_yards'].max()
                     if not pd.isna(actual_h_qb):
                         self.metrics["qb_errors"].append(abs(actual_h_qb - pred_h_qb))
                         self.engine.self_correct(h_team, actual_h_qb, pred_h_qb, 'pass')
 
-                a_rbs = weekly[(weekly[team_col_weekly] == a_team) & (weekly['week'] == game['week'])]
+                a_rbs = weekly[(weekly[team_col_weekly] == a_team) & (weekly[week_col] == game_week)]
                 if not a_rbs.empty and 'rushing_yards' in a_rbs.columns:
                     actual_a_rb = a_rbs['rushing_yards'].max()
                     if not pd.isna(actual_a_rb):
